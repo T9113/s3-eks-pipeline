@@ -13,12 +13,13 @@ phases:
       python: 3.12
     commands:
       - echo "Installing kubectl..."
-      # This clean static link prevents syntax parsing issues completely
+      # Fixed the binary target download path explicitly
       - curl -fsSL "https://k8s.io" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - apt-get update
-      - apt-get install -y gettext-base
+      # Replaced apt-get with yum for Amazon Linux image compatibility
+      - yum update -y
+      - yum install -y gettext
 
   pre_build:
     commands:
