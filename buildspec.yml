@@ -10,10 +10,11 @@ env:
 phases:
   install:
     runtime-versions:
-      python: 3.12  # Keep Python, but REMOVE the 'docker' block entirely
+      python: 3.12
     commands:
       - echo "Installing kubectl..."
-      - curl -fsSL https://k8s.io(curl -fsSL https://k8s.io)/bin/linux/amd64/kubectl -o kubectl
+      # This clean static link prevents syntax parsing issues completely
+      - curl -fsSL "https://k8s.io" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
       - apt-get update
