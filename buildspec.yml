@@ -16,8 +16,6 @@ phases:
       - curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - apt-get update -y
-      - apt-get install -y gettext-base
 
   pre_build:
     commands:
@@ -48,7 +46,12 @@ phases:
   post_build:
     commands:
       - echo "Rendering Kubernetes manifest..."
-      - envsubst '${REGISTRY} ${BACKEND_REPO} ${FRONTEND_REPO} ${IMAGE_TAG_SHORT}' < app-deployment.yaml > deploy.yaml
+      - |
+        sed -e "s|\${REGISTRY}|$REGISTRY|g" \
+            -e "s|\${BACKEND_REPO}|$BACKEND_REPO|g" \
+            -e "s|\${FRONTEND_REPO}|$FRONTEND_REPO|g" \
+            -e "s|\${IMAGE_TAG_SHORT}|$IMAGE_TAG_SHORT|g" \
+            app-deployment.yaml > deploy.yaml
       - grep "image:" deploy.yaml
       - aws sts get-caller-identity
       - kubectl config current-context
