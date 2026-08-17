@@ -16,7 +16,7 @@ Parameters:
     Default: github-token
   ClusterName:
     Type: String
-    Default: pdf-cluster
+    Default: pdf-app-cluster
   AwsRegion:
     Type: String
     Default: eu-north-1
