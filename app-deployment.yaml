@@ -1,4 +1,4 @@
-# Replace <ACCOUNT_ID> before applying.
+# Replace template tokens before applying.
 # Registry host must match your cluster region: eu-north-1.
 ---
 apiVersion: apps/v1
@@ -17,11 +17,11 @@ spec:
       labels:
         app: pdf-backend
     spec:
-      # Created by `eksctl create iamserviceaccount` — this is what grants S3 access.
       serviceAccountName: backend-s3-sa
       containers:
         - name: backend
-          image: <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/pdf-backend:v1
+          # Uniform template variable configuration
+          image: ${AWS_ACCOUNT_ID}://{IMAGE_TAG_SHORT}
           ports:
             - containerPort: 5000
           env:
@@ -37,8 +37,6 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 20
           readinessProbe:
-            # Fails until the IRSA role can actually reach the bucket,
-            # so a misconfigured role shows up as NotReady instead of 500s.
             httpGet: { path: /api/ready, port: 5000 }
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -76,7 +74,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/pdf-frontend:v1
+          # Uniform template variable configuration
+          image: ${AWS_ACCOUNT_ID}://{IMAGE_TAG_SHORT}
           ports:
             - containerPort: 8080
           resources:
@@ -111,11 +110,10 @@ kind: Ingress
 metadata:
   name: pdf-app-ingress
 spec:
-  # The old `kubernetes.io/ingress.class` annotation is deprecated;
-  # Traefik's Helm chart registers this IngressClass.
   ingressClassName: traefik
   rules:
-    - host: app.yourdomain.com
+    # UPDATED: Matches your live public domain address precisely
+    - host: pdf.tayyabmasood.me
       http:
         paths:
           - path: /api
