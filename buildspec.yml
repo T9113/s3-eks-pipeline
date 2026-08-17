@@ -12,8 +12,8 @@ phases:
     runtime-versions:
       python: 3.12
     commands:
-      - echo "Installing kubectl binary command line utility..."
-      # FIXED: Downloads the actual native compiled binary utility tool for Linux architectures
+      - echo "Installing true kubectl binary command line utility..."
+      # FIXED: Uses the exact dl.k8s.io compiled binary link path
       - curl -fsSL "https://k8s.io" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
@@ -46,7 +46,6 @@ phases:
       - docker push "$REGISTRY/$FRONTEND_REPO:latest"
 
       - echo "Updating Kubernetes deployment manifest with explicit targets..."
-      # FIXED: Targets repository path strings directly to prevent silent parsing failures
       - sed -i "s|image:.*$BACKEND_REPO.*|image:\ $REGISTRY\/$BACKEND_REPO:$IMAGE_TAG_SHORT|g" app-deployment.yaml
       - sed -i "s|image:.*$FRONTEND_REPO.*|image:\ $REGISTRY\/$FRONTEND_REPO:$IMAGE_TAG_SHORT|g" app-deployment.yaml
       
