@@ -16,8 +16,8 @@ phases:
       - curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - yum update -y
-      - yum install -y gettext
+      - apt-get update -y
+      - apt-get install -y gettext-base
 
   pre_build:
     commands:
@@ -25,8 +25,9 @@ phases:
       - COMMIT_HASH=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c 1-7)
       - export IMAGE_TAG_SHORT=${COMMIT_HASH:-latest}
       - export REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+      - echo "Region=$AWS_REGION Cluster=$EKS_CLUSTER_NAME Registry=$REGISTRY Tag=$IMAGE_TAG_SHORT"
       - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
-      - aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME" --role-arn "arn:aws:iam::816116369771:role/service-role/codebuild-sentiment-analysis-build-service-role"
+      - aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
 
   build:
     commands:
@@ -44,15 +45,17 @@ phases:
       - docker push "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT"
       - docker push "$REGISTRY/$FRONTEND_REPO:latest"
 
-      - echo "Updating Kubernetes deployment manifest..."
-      - sed -e "s|<ACCOUNT_ID>|${AWS_ACCOUNT_ID}|g" -e "s|:v1|:${IMAGE_TAG_SHORT}|g" app-deployment.yaml > deploy.yaml
-      - echo "Current AWS principal..."
+  post_build:
+    commands:
+      - echo "Rendering Kubernetes manifest..."
+      - envsubst '${REGISTRY} ${BACKEND_REPO} ${FRONTEND_REPO} ${IMAGE_TAG_SHORT}' < app-deployment.yaml > deploy.yaml
+      - grep "image:" deploy.yaml
       - aws sts get-caller-identity
-      - echo "Checking EKS access..."
       - kubectl config current-context
-      - kubectl auth can-i get nodes --as=codebuild-user --as-group=system:masters
       - kubectl get nodes
       - kubectl apply -f deploy.yaml
+      - kubectl rollout status deployment/pdf-backend --timeout=180s
+      - kubectl rollout status deployment/pdf-frontend --timeout=180s
 
 artifacts:
   files:

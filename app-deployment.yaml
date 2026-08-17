@@ -21,7 +21,7 @@ spec:
       containers:
         - name: backend
           # Uniform template variable configuration
-          image: ${AWS_ACCOUNT_ID}://{IMAGE_TAG_SHORT}
+          image: ${REGISTRY}/${BACKEND_REPO}:${IMAGE_TAG_SHORT}
           ports:
             - containerPort: 5000
           env:
@@ -75,7 +75,7 @@ spec:
       containers:
         - name: frontend
           # Uniform template variable configuration
-          image: ${AWS_ACCOUNT_ID}://{IMAGE_TAG_SHORT}
+          image: ${REGISTRY}/${FRONTEND_REPO}:${IMAGE_TAG_SHORT}
           ports:
             - containerPort: 8080
           resources:
