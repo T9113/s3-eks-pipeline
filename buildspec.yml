@@ -1,11 +1,18 @@
 version: 0.2
 
+env:
+  variables:
+    AWS_REGION: "eu-north-1"
+    EKS_CLUSTER_NAME: "pdf-app-cluster"
+    BACKEND_REPO: "pdf-backend"
+    FRONTEND_REPO: "pdf-frontend"
+
 phases:
   install:
     runtime-versions:
       python: 3.12
     commands:
-      - echo "Installing true kubectl binary utility..."
+      - echo "Installing true kubectl binary command line utility..."
       - curl -fsSL "https://k8s.io" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
@@ -26,24 +33,19 @@ phases:
       - echo "Building backend image..."
       - docker build -f Dockerfile -t "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT" .
       - docker tag "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT" "$REGISTRY/$BACKEND_REPO:latest"
-
       - echo "Building frontend image..."
       - docker build -f frontend.Dockerfile -t "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT" .
       - docker tag "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT" "$REGISTRY/$FRONTEND_REPO:latest"
-
       - echo "Pushing container images to ECR..."
       - docker push "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT"
       - docker push "$REGISTRY/$BACKEND_REPO:latest"
       - docker push "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT"
       - docker push "$REGISTRY/$FRONTEND_REPO:latest"
-
       - echo "Updating Kubernetes deployment manifest with explicit targets..."
       - sed -i "s|image:.*$BACKEND_REPO.*|image:\ $REGISTRY\/$BACKEND_REPO:$IMAGE_TAG_SHORT|g" app-deployment.yaml
       - sed -i "s|image:.*$FRONTEND_REPO.*|image:\ $REGISTRY\/$FRONTEND_REPO:$IMAGE_TAG_SHORT|g" app-deployment.yaml
-      
       - echo "--- DEBUG: Printing Compiled Manifest File ---"
       - cat app-deployment.yaml
-      
       - echo "Applying updated manifests to EKS cluster..."
       - kubectl apply -f app-deployment.yaml
 
