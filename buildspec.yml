@@ -46,6 +46,10 @@ phases:
 
       - echo "Updating Kubernetes deployment manifest..."
       - sed -e "s|<ACCOUNT_ID>|${AWS_ACCOUNT_ID}|g" -e "s|:v1|:${IMAGE_TAG_SHORT}|g" app-deployment.yaml > deploy.yaml
+      - echo "Current AWS principal..."
+      - aws sts get-caller-identity
+      - echo "Checking EKS access..."
+      - kubectl get nodes
       - kubectl apply -f deploy.yaml
 
 artifacts:
