@@ -1,0 +1,53 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: "eu-north-1"
+    EKS_CLUSTER_NAME: "pdf-cluster"
+    BACKEND_REPO: "pdf-backend"
+    FRONTEND_REPO: "pdf-frontend"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+      docker: 23
+    commands:
+      - curl -fsSL https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl -o kubectl
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
+      - apt-get update
+      - apt-get install -y gettext-base
+
+  pre_build:
+    commands:
+      - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:-latest}
+      - export IMAGE_TAG_SHORT=${IMAGE_TAG:0:7}
+      - export REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+      - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+      - aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
+
+  build:
+    commands:
+      - echo "Building backend image..."
+      - docker build -f Dockerfile -t "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT" .
+      - docker tag "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT" "$REGISTRY/$BACKEND_REPO:latest"
+
+      - echo "Building frontend image..."
+      - docker build -f frontend.Dockerfile -t "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT" .
+      - docker tag "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT" "$REGISTRY/$FRONTEND_REPO:latest"
+
+      - echo "Pushing container images to ECR..."
+      - docker push "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT"
+      - docker push "$REGISTRY/$BACKEND_REPO:latest"
+      - docker push "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT"
+      - docker push "$REGISTRY/$FRONTEND_REPO:latest"
+
+      - echo "Updating Kubernetes deployment manifest..."
+      - sed -e "s|<ACCOUNT_ID>|${AWS_ACCOUNT_ID}|g" -e "s|:v1|:${IMAGE_TAG_SHORT}|g" app-deployment.yaml > deploy.yaml
+      - kubectl apply -f deploy.yaml
+
+artifacts:
+  files:
+    - deploy.yaml

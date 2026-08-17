@@ -1,0 +1,3 @@
+/build-and-push.sh
+/setup-s3-irsa.sh
+/traefik-values.yaml

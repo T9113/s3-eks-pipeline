@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Store</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#272b35; --fg:#e6e8ec; --mut:#8b93a3; --acc:#4f8cff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:48px 20px; }
+  h1 { font-size:24px; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--mut); margin:0 0 32px; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:20px; margin-bottom:20px; }
+  .drop { border:1.5px dashed var(--line); border-radius:8px; padding:36px 20px;
+          text-align:center; color:var(--mut); cursor:pointer; transition:.15s; }
+  .drop:hover, .drop.over { border-color:var(--acc); color:var(--fg); background:#1c2029; }
+  input[type=file] { display:none; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:6px;
+           padding:9px 18px; font-size:14px; font-weight:500; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; align-items:center; justify-content:space-between;
+         padding:12px 0; border-bottom:1px solid var(--line); gap:12px; }
+  .row:last-child { border-bottom:0; }
+  .name { font-size:14px; word-break:break-all; }
+  .meta { color:var(--mut); font-size:12px; }
+  a.dl { color:var(--acc); text-decoration:none; font-size:13px; white-space:nowrap; }
+  a.dl:hover { text-decoration:underline; }
+  #msg { min-height:20px; font-size:13px; margin-top:12px; }
+  .ok { color:#4ade80; } .err { color:#f87171; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.06em;
+       color:var(--mut); margin:0 0 8px; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PDF Store</h1>
+  <p class="sub">Files are stored in S3. </p>
+
+  <div class="card">
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept="application/pdf">
+      <div id="droptext">Drop a PDF here, or click to choose</div>
+    </label>
+    <div style="margin-top:16px; display:flex; align-items:center; gap:12px;">
+      <button id="up" disabled>Upload</button>
+      <span id="msg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Stored files</h2>
+    <div id="list" class="meta">Loading…</div>
+  </div>
+</div>
+
+<script>
+const API = "/api";
+const $ = id => document.getElementById(id);
+let picked = null;
+
+function setMsg(t, cls="") { $("msg").className = cls; $("msg").textContent = t; }
+
+function pick(f) {
+  if (!f) return;
+  if (!f.name.toLowerCase().endsWith(".pdf")) { setMsg("Only .pdf files are accepted.", "err"); return; }
+  picked = f;
+  $("droptext").textContent = f.name + " (" + fmt(f.size) + ")";
+  $("up").disabled = false;
+  setMsg("");
+}
+
+function fmt(b) {
+  if (b < 1024) return b + " B";
+  if (b < 1048576) return (b/1024).toFixed(1) + " KB";
+  return (b/1048576).toFixed(1) + " MB";
+}
+
+$("file").addEventListener("change", e => pick(e.target.files[0]));
+
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => pick(e.dataTransfer.files[0]));
+
+$("up").addEventListener("click", async () => {
+  if (!picked) return;
+  $("up").disabled = true;
+  setMsg("Uploading…");
+  const fd = new FormData();
+  fd.append("file", picked);
+  try {
+    const r = await fetch(API + "/upload", { method:"POST", body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    setMsg("Uploaded.", "ok");
+    picked = null;
+    $("file").value = "";
+    $("droptext").textContent = "Drop a PDF here, or click to choose";
+    load();
+  } catch (err) {
+    setMsg(err.message, "err");
+    $("up").disabled = false;
+  }
+});
+
+async function getUrl(key) {
+  const r = await fetch(API + "/download?key=" + encodeURIComponent(key));
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error);
+  window.open(d.url, "_blank");
+}
+
+async function load() {
+  try {
+    const r = await fetch(API + "/files");
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    if (!d.files.length) { $("list").textContent = "Nothing uploaded yet."; return; }
+    $("list").innerHTML = "";
+    d.files.forEach(f => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const left = document.createElement("div");
+      left.innerHTML = '<div class="name"></div><div class="meta"></div>';
+      left.querySelector(".name").textContent = f.filename;
+      left.querySelector(".meta").textContent =
+        fmt(f.size) + " · " + new Date(f.modified).toLocaleString();
+      const a = document.createElement("a");
+      a.className = "dl"; a.href = "#"; a.textContent = "Download";
+      a.onclick = e => { e.preventDefault(); getUrl(f.key).catch(x => setMsg(x.message,"err")); };
+      row.append(left, a);
+      $("list").append(row);
+    });
+  } catch (err) {
+    $("list").textContent = "Could not load files: " + err.message;
+  }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+# Replace <ACCOUNT_ID> before applying.
+# Registry host must match your cluster region: eu-north-1.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdf-backend
+  labels:
+    app: pdf-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pdf-backend
+  template:
+    metadata:
+      labels:
+        app: pdf-backend
+    spec:
+      # Created by `eksctl create iamserviceaccount` — this is what grants S3 access.
+      serviceAccountName: backend-s3-sa
+      containers:
+        - name: backend
+          image: <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/pdf-backend:v1
+          ports:
+            - containerPort: 5000
+          env:
+            - name: S3_BUCKET
+              value: "pdf-storage-app-bucket-unique"
+            - name: AWS_REGION
+              value: "eu-north-1"
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /api/health, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            # Fails until the IRSA role can actually reach the bucket,
+            # so a misconfigured role shows up as NotReady instead of 500s.
+            httpGet: { path: /api/ready, port: 5000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdf-backend-service
+spec:
+  selector:
+    app: pdf-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdf-frontend
+  labels:
+    app: pdf-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pdf-frontend
+  template:
+    metadata:
+      labels:
+        app: pdf-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: <ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/pdf-frontend:v1
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdf-frontend-service
+spec:
+  selector:
+    app: pdf-frontend
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pdf-app-ingress
+spec:
+  # The old `kubernetes.io/ingress.class` annotation is deprecated;
+  # Traefik's Helm chart registers this IngressClass.
+  ingressClassName: traefik
+  rules:
+    - host: app.yourdomain.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: pdf-backend-service
+                port:
+                  number: 5000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pdf-frontend-service
+                port:
+                  number: 80
