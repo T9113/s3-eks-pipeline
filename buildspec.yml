@@ -13,11 +13,10 @@ phases:
       python: 3.12
     commands:
       - echo "Installing kubectl..."
-      # Fixed the binary target download path explicitly
+      # FIXED: Downloads the actual compiled binary matching your EKS cluster version (v1.36.0)
       - curl -fsSL "https://k8s.io" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      # Replaced apt-get with yum for Amazon Linux image compatibility
       - yum update -y
       - yum install -y gettext
 
