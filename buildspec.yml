@@ -12,8 +12,8 @@ phases:
     runtime-versions:
       python: 3.12
     commands:
-      - echo "Installing true kubectl binary command line utility..."
-      - curl -fsSL "https://k8s.io" -o kubectl
+      - echo "Installing kubectl..."
+      - curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
       - yum update -y
@@ -22,7 +22,7 @@ phases:
   pre_build:
     commands:
       - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - COMMIT_HASH=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c 1-7)
       - export IMAGE_TAG_SHORT=${COMMIT_HASH:-latest}
       - export REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
       - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
@@ -33,22 +33,21 @@ phases:
       - echo "Building backend image..."
       - docker build -f Dockerfile -t "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT" .
       - docker tag "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT" "$REGISTRY/$BACKEND_REPO:latest"
+
       - echo "Building frontend image..."
       - docker build -f frontend.Dockerfile -t "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT" .
       - docker tag "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT" "$REGISTRY/$FRONTEND_REPO:latest"
+
       - echo "Pushing container images to ECR..."
       - docker push "$REGISTRY/$BACKEND_REPO:$IMAGE_TAG_SHORT"
       - docker push "$REGISTRY/$BACKEND_REPO:latest"
       - docker push "$REGISTRY/$FRONTEND_REPO:$IMAGE_TAG_SHORT"
       - docker push "$REGISTRY/$FRONTEND_REPO:latest"
-      - echo "Updating Kubernetes deployment manifest with explicit targets..."
-      - sed -i "s|image:.*$BACKEND_REPO.*|image:\ $REGISTRY\/$BACKEND_REPO:$IMAGE_TAG_SHORT|g" app-deployment.yaml
-      - sed -i "s|image:.*$FRONTEND_REPO.*|image:\ $REGISTRY\/$FRONTEND_REPO:$IMAGE_TAG_SHORT|g" app-deployment.yaml
-      - echo "--- DEBUG: Printing Compiled Manifest File ---"
-      - cat app-deployment.yaml
-      - echo "Applying updated manifests to EKS cluster..."
-      - kubectl apply -f app-deployment.yaml
+
+      - echo "Updating Kubernetes deployment manifest..."
+      - sed -e "s|<ACCOUNT_ID>|${AWS_ACCOUNT_ID}|g" -e "s|:v1|:${IMAGE_TAG_SHORT}|g" app-deployment.yaml > deploy.yaml
+      - kubectl apply -f deploy.yaml
 
 artifacts:
   files:
-    - app-deployment.yaml
+    - deploy.yaml
