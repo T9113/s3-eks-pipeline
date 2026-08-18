@@ -1,11 +1,11 @@
 version: 0.2
 
-env:
-  variables:
-    AWS_REGION: "eu-north-1"
-    EKS_CLUSTER_NAME: "pdf-app-cluster"
-    BACKEND_REPO: "pdf-backend"
-    FRONTEND_REPO: "pdf-frontend"
+# env:
+#   variables:
+#     AWS_REGION: "eu-north-1"
+#     EKS_CLUSTER_NAME: "pdf-app-cluster"
+#     BACKEND_REPO: "pdf-backend"
+#     FRONTEND_REPO: "pdf-frontend"
 
 phases:
   install:
